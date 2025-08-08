@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>🍦 Ice Cream Clicker</title>
+<title>🍦 Ice Cream Clicker - Infinite Upgrades</title>
 <style>
   body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -96,161 +96,176 @@
   <button id="icecream-btn" aria-label="Click ice cream">🍨</button>
   <div id="perClick">Scoops per click: 1</div>
 
-  <button class="upgrade" id="upgrade1" disabled>Buy Upgrade: Double Scoops (Cost: 50 scoops)</button>
-  <button class="upgrade" id="upgrade2" disabled>Buy Upgrade: Triple Scoops (Cost: 200 scoops)</button>
-  <button class="upgrade" id="upgrade3" disabled>Buy Upgrade: +5 Scoops per Click (Cost: 1000 scoops)</button>
-  <button class="upgrade" id="upgrade4" disabled>Buy Upgrade: x2 Scoops Multiplier (Cost: 3000 scoops)</button>
-  <button class="upgrade" id="upgrade5" disabled>Buy Upgrade: +10 Scoops per Click (Cost: 10000 scoops)</button>
-  <button class="upgrade" id="upgrade6" disabled>Buy Upgrade: x3 Scoops Multiplier (Cost: 25000 scoops)</button>
-  <button class="upgrade" id="upgrade7" disabled>Buy Upgrade: +50 Scoops per Click (Cost: 100000 scoops)</button>
+  <button class="upgrade" id="upgrade1" disabled></button>
+  <button class="upgrade" id="upgrade2" disabled></button>
+  <button class="upgrade" id="upgrade3" disabled></button>
+  <button class="upgrade" id="upgrade4" disabled></button>
+  <button class="upgrade" id="upgrade5" disabled></button>
+  <button class="upgrade" id="upgrade6" disabled></button>
+  <button class="upgrade" id="upgrade7" disabled></button>
 
   <button id="reset-btn">Reset Progress</button>
 
 <script>
-  // Game state
   let scoops = 0;
-  let scoopsPerClick = 1;
+  let baseScoopsPerClick = 1;
   let multiplier = 1;
-  
-  // Upgrades array with effects and costs
+
+  // Define upgrades with starting cost and effect type
   const upgrades = [
     {
-      id: 'upgrade1', cost: 50,
-      effect: () => { scoopsPerClick *= 2; },
-      bought: false
+      id: 'upgrade1',
+      baseCost: 50,
+      level: 0,
+      effect: (level) => baseScoopsPerClick * (2 ** level), // doubles per level
+      description: 'Doubles your scoops per click per level',
+      type: 'multiplier', // effect type
     },
     {
-      id: 'upgrade2', cost: 200,
-      effect: () => { scoopsPerClick *= 3; },
-      bought: false
+      id: 'upgrade2',
+      baseCost: 200,
+      level: 0,
+      effect: (level) => baseScoopsPerClick * (3 ** level), // triples per level
+      description: 'Triples your scoops per click per level',
+      type: 'multiplier',
     },
     {
-      id: 'upgrade3', cost: 1000,
-      effect: () => { scoopsPerClick += 5; },
-      bought: false
+      id: 'upgrade3',
+      baseCost: 1000,
+      level: 0,
+      effect: (level) => 5 * level, // +5 per level additive
+      description: '+5 scoops per click per level',
+      type: 'additive',
     },
     {
-      id: 'upgrade4', cost: 3000,
-      effect: () => { multiplier *= 2; },
-      bought: false
+      id: 'upgrade4',
+      baseCost: 3000,
+      level: 0,
+      effect: (level) => 2 ** level,
+      description: 'x2 multiplier per level',
+      type: 'multiplierGlobal',
     },
     {
-      id: 'upgrade5', cost: 10000,
-      effect: () => { scoopsPerClick += 10; },
-      bought: false
+      id: 'upgrade5',
+      baseCost: 10000,
+      level: 0,
+      effect: (level) => 10 * level,
+      description: '+10 scoops per click per level',
+      type: 'additive',
     },
     {
-      id: 'upgrade6', cost: 25000,
-      effect: () => { multiplier *= 3; },
-      bought: false
+      id: 'upgrade6',
+      baseCost: 25000,
+      level: 0,
+      effect: (level) => 3 ** level,
+      description: 'x3 multiplier per level',
+      type: 'multiplierGlobal',
     },
     {
-      id: 'upgrade7', cost: 100000,
-      effect: () => { scoopsPerClick += 50; },
-      bought: false
+      id: 'upgrade7',
+      baseCost: 100000,
+      level: 0,
+      effect: (level) => 50 * level,
+      description: '+50 scoops per click per level',
+      type: 'additive',
     },
   ];
 
-  // DOM elements
   const scoopsEl = document.getElementById('scoops');
   const perClickEl = document.getElementById('perClick');
   const icecreamBtn = document.getElementById('icecream-btn');
   const resetBtn = document.getElementById('reset-btn');
 
-  // Save progress in localStorage
-  function saveProgress() {
-    localStorage.setItem('icecreamScoops', scoops);
-    localStorage.setItem('icecreamPerClick', scoopsPerClick);
-    localStorage.setItem('icecreamMultiplier', multiplier);
-    localStorage.setItem('icecreamUpgrades', JSON.stringify(upgrades.map(u => u.bought)));
+  // Calculate current cost for an upgrade (increases by 50% each level)
+  function currentCost(upgrade) {
+    return Math.floor(upgrade.baseCost * Math.pow(1.5, upgrade.level));
   }
 
-  // Load progress from localStorage
+  // Calculate scoops per click based on all upgrades
+  function calculateScoopsPerClick() {
+    let additive = 0;
+    let localMultiplier = 1;
+    let globalMultiplier = 1;
+
+    upgrades.forEach(u => {
+      if (u.level > 0) {
+        if (u.type === 'multiplier') {
+          localMultiplier *= u.effect(u.level);
+        } else if (u.type === 'additive') {
+          additive += u.effect(u.level);
+        } else if (u.type === 'multiplierGlobal') {
+          globalMultiplier *= u.effect(u.level);
+        }
+      }
+    });
+
+    // baseScoopsPerClick times local multipliers + additive, then times global multipliers
+    return ((baseScoopsPerClick * localMultiplier) + additive) * globalMultiplier;
+  }
+
+  function updateDisplay() {
+    scoopsEl.textContent = 'Scoops: ' + scoops.toLocaleString();
+    perClickEl.textContent = 'Scoops per click: ' + calculateScoopsPerClick().toLocaleString();
+
+    upgrades.forEach(u => {
+      const btn = document.getElementById(u.id);
+      const cost = currentCost(u);
+      btn.textContent = `Level ${u.level} — Buy Upgrade: ${cost.toLocaleString()} scoops\n${u.description}`;
+      btn.disabled = scoops < cost;
+    });
+  }
+
+  function saveProgress() {
+    localStorage.setItem('icecreamScoops', scoops);
+    localStorage.setItem('icecreamBaseScoopsPerClick', baseScoopsPerClick);
+    localStorage.setItem('icecreamUpgrades', JSON.stringify(upgrades.map(u => u.level)));
+  }
+
   function loadProgress() {
     const savedScoops = parseInt(localStorage.getItem('icecreamScoops'));
     if (!isNaN(savedScoops)) scoops = savedScoops;
 
-    const savedPerClick = parseInt(localStorage.getItem('icecreamPerClick'));
-    if (!isNaN(savedPerClick)) scoopsPerClick = savedPerClick;
-
-    const savedMultiplier = parseInt(localStorage.getItem('icecreamMultiplier'));
-    if (!isNaN(savedMultiplier)) multiplier = savedMultiplier;
+    const savedBase = parseInt(localStorage.getItem('icecreamBaseScoopsPerClick'));
+    if (!isNaN(savedBase)) baseScoopsPerClick = savedBase;
 
     const savedUpgrades = JSON.parse(localStorage.getItem('icecreamUpgrades'));
     if (Array.isArray(savedUpgrades)) {
-      savedUpgrades.forEach((bought, i) => {
-        upgrades[i].bought = bought;
-        if (bought) upgrades[i].effect();
+      savedUpgrades.forEach((lvl, i) => {
+        upgrades[i].level = lvl;
       });
     }
   }
 
-  // Update UI text and button states
-  function updateDisplay() {
-    scoopsEl.textContent = 'Scoops: ' + scoops.toLocaleString();
-    perClickEl.textContent = 'Scoops per click: ' + (scoopsPerClick * multiplier).toLocaleString();
-
-    upgrades.forEach(u => {
-      const btn = document.getElementById(u.id);
-      if (u.bought) {
-        btn.textContent = `Upgrade Purchased`;
-        btn.disabled = true;
-      } else {
-        btn.textContent = `Buy Upgrade: ${btn.textContent.match(/\(Cost: [\d,]+ scoops\)/)[0]}`;
-        btn.disabled = scoops < u.cost;
-      }
-    });
-  }
-
-  // Enable or disable upgrades based on scoops available
-  function checkUpgrades() {
-    upgrades.forEach(u => {
-      const btn = document.getElementById(u.id);
-      if (!u.bought) {
-        btn.disabled = scoops < u.cost;
-      }
-    });
-  }
-
-  // Clicking the ice cream
   icecreamBtn.addEventListener('click', () => {
-    scoops += scoopsPerClick * multiplier;
+    scoops += Math.floor(calculateScoopsPerClick());
     updateDisplay();
-    checkUpgrades();
     saveProgress();
   });
 
-  // Upgrade button handlers
   upgrades.forEach(u => {
     document.getElementById(u.id).addEventListener('click', () => {
-      if (!u.bought && scoops >= u.cost) {
-        scoops -= u.cost;
-        u.bought = true;
-        u.effect();
+      const cost = currentCost(u);
+      if (scoops >= cost) {
+        scoops -= cost;
+        u.level++;
         updateDisplay();
-        checkUpgrades();
         saveProgress();
       }
     });
   });
 
-  // Reset button handler
   resetBtn.addEventListener('click', () => {
     if (confirm('Are you sure you want to reset your progress?')) {
       scoops = 0;
-      scoopsPerClick = 1;
-      multiplier = 1;
-      upgrades.forEach(u => u.bought = false);
+      baseScoopsPerClick = 1;
+      upgrades.forEach(u => u.level = 0);
       updateDisplay();
-      checkUpgrades();
       saveProgress();
     }
   });
 
-  // Initialize game
   loadProgress();
   updateDisplay();
-  checkUpgrades();
 </script>
 </body>
 </html>
