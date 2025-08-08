@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>My GitHub Repositories Dashboard</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    max-width: 900px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    background: #121212;
+    color: #eee;
+  }
+  h1 {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+  ul {
+    list-style: none;
+    padding: 0;
+  }
+  li {
+    background: #222;
+    margin-bottom: 1rem;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    transition: background 0.3s ease;
+  }
+  li:hover {
+    background: #333;
+  }
+  .repo-info {
+    max-width: 75%;
+  }
+  .repo-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.3rem;
+  }
+  .repo-desc {
+    font-size: 0.9rem;
+    color: #bbb;
+  }
+  .links {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+  a {
+    color: #0ea5e9;
+    text-decoration: none;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  .arrow {
+    font-weight: bold;
+    font-size: 1.3rem;
+  }
+</style>
+</head>
+<body>
+  <h1>My GitHub Repositories</h1>
+  <ul id="repo-list" aria-live="polite"></ul>
+
+<script>
+  // Edit your repositories here:
+  const repos = [
+    {
+      name: "Tetris Game",
+      description: "Classic Tetris implemented in JavaScript.",
+      url: "https://github.com/yourusername/tetris",
+      path: "tetris"
+    },
+    {
+      name: "Snake Game",
+      description: "Simple snake game with keyboard controls.",
+      url: "https://github.com/yourusername/snake",
+      path: "snake"
+    }
+    // Add more repos here...
+  ];
+
+  function renderRepos(repos) {
+    const ul = document.getElementById('repo-list');
+    ul.innerHTML = '';
+
+    repos.forEach(repo => {
+      const li = document.createElement('li');
+
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'repo-info';
+
+      const name = document.createElement('div');
+      name.className = 'repo-name';
+      name.textContent = repo.name;
+
+      const desc = document.createElement('div');
+      desc.className = 'repo-desc';
+      desc.textContent = repo.description;
+
+      infoDiv.appendChild(name);
+      infoDiv.appendChild(desc);
+
+      const linksDiv = document.createElement('div');
+      linksDiv.className = 'links';
+
+      // Link to hosted repo folder
+      const siteLink = document.createElement('a');
+      siteLink.href = `/${repo.path}/`;
+      siteLink.target = '_blank';
+      siteLink.rel = 'noopener noreferrer';
+      siteLink.innerHTML = 'Site <span class="arrow">→</span>';
+
+      // GitHub link
+      const ghLink = document.createElement('a');
+      ghLink.href = repo.url;
+      ghLink.target = '_blank';
+      ghLink.rel = 'noopener noreferrer';
+      ghLink.textContent = 'GitHub';
+
+      linksDiv.appendChild(siteLink);
+      linksDiv.appendChild(ghLink);
+
+      li.appendChild(infoDiv);
+      li.appendChild(linksDiv);
+      ul.appendChild(li);
+    });
+  }
+
+  renderRepos(repos);
+</script>
+</body>
+</html>
