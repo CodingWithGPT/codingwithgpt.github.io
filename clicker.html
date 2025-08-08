@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>🍦 Ice Cream Clicker</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #fffbf0;
+    color: #5a3e1b;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+    user-select: none;
+    min-height: 100vh;
+    margin: 0;
+  }
+  h1 {
+    margin-bottom: 0.5rem;
+  }
+  #scoops {
+    font-size: 3rem;
+    margin: 1rem 0;
+  }
+  #icecream-btn {
+    font-size: 5rem;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.1s ease;
+    background: none;
+    border: none;
+    outline: none;
+  }
+  #icecream-btn:active {
+    transform: scale(0.9);
+  }
+  #perClick {
+    margin-top: 0.5rem;
+    font-size: 1.2rem;
+    color: #7a5b25;
+    font-weight: 600;
+  }
+  .upgrade {
+    background: #ffdca8;
+    border: 2px solid #f5b14c;
+    border-radius: 12px;
+    padding: 1rem 2rem;
+    margin-top: 1rem;
+    width: 320px;
+    text-align: center;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #5a3e1b;
+    transition: background-color 0.3s, color 0.3s;
+    user-select: none;
+  }
+  .upgrade:disabled {
+    background: #f0e4cc;
+    border-color: #ccc;
+    color: #999;
+    cursor: not-allowed;
+  }
+  .upgrade:hover:not(:disabled) {
+    background: #f5b14c;
+    color: white;
+  }
+  #reset-btn {
+    margin-top: 2rem;
+    background: #d94f4f;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 1rem;
+    color: white;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.3s;
+  }
+  #reset-btn:hover {
+    background: #b93b3b;
+  }
+  @media (max-width: 400px) {
+    .upgrade {
+      width: 90vw;
+    }
+  }
+</style>
+</head>
+<body>
+  <h1>🍦 Ice Cream Clicker</h1>
+  <div id="scoops">Scoops: 0</div>
+  <button id="icecream-btn" aria-label="Click ice cream">🍨</button>
+  <div id="perClick">Scoops per click: 1</div>
+
+  <button class="upgrade" id="upgrade1" disabled>Buy Upgrade: Double Scoops (Cost: 50 scoops)</button>
+  <button class="upgrade" id="upgrade2" disabled>Buy Upgrade: Triple Scoops (Cost: 200 scoops)</button>
+  <button class="upgrade" id="upgrade3" disabled>Buy Upgrade: +5 Scoops per Click (Cost: 1000 scoops)</button>
+  <button class="upgrade" id="upgrade4" disabled>Buy Upgrade: x2 Scoops Multiplier (Cost: 3000 scoops)</button>
+  <button class="upgrade" id="upgrade5" disabled>Buy Upgrade: +10 Scoops per Click (Cost: 10000 scoops)</button>
+  <button class="upgrade" id="upgrade6" disabled>Buy Upgrade: x3 Scoops Multiplier (Cost: 25000 scoops)</button>
+  <button class="upgrade" id="upgrade7" disabled>Buy Upgrade: +50 Scoops per Click (Cost: 100000 scoops)</button>
+
+  <button id="reset-btn">Reset Progress</button>
+
+<script>
+  // Game state
+  let scoops = 0;
+  let scoopsPerClick = 1;
+  let multiplier = 1;
+  
+  // Upgrades array with effects and costs
+  const upgrades = [
+    {
+      id: 'upgrade1', cost: 50,
+      effect: () => { scoopsPerClick *= 2; },
+      bought: false
+    },
+    {
+      id: 'upgrade2', cost: 200,
+      effect: () => { scoopsPerClick *= 3; },
+      bought: false
+    },
+    {
+      id: 'upgrade3', cost: 1000,
+      effect: () => { scoopsPerClick += 5; },
+      bought: false
+    },
+    {
+      id: 'upgrade4', cost: 3000,
+      effect: () => { multiplier *= 2; },
+      bought: false
+    },
+    {
+      id: 'upgrade5', cost: 10000,
+      effect: () => { scoopsPerClick += 10; },
+      bought: false
+    },
+    {
+      id: 'upgrade6', cost: 25000,
+      effect: () => { multiplier *= 3; },
+      bought: false
+    },
+    {
+      id: 'upgrade7', cost: 100000,
+      effect: () => { scoopsPerClick += 50; },
+      bought: false
+    },
+  ];
+
+  // DOM elements
+  const scoopsEl = document.getElementById('scoops');
+  const perClickEl = document.getElementById('perClick');
+  const icecreamBtn = document.getElementById('icecream-btn');
+  const resetBtn = document.getElementById('reset-btn');
+
+  // Save progress in localStorage
+  function saveProgress() {
+    localStorage.setItem('icecreamScoops', scoops);
+    localStorage.setItem('icecreamPerClick', scoopsPerClick);
+    localStorage.setItem('icecreamMultiplier', multiplier);
+    localStorage.setItem('icecreamUpgrades', JSON.stringify(upgrades.map(u => u.bought)));
+  }
+
+  // Load progress from localStorage
+  function loadProgress() {
+    const savedScoops = parseInt(localStorage.getItem('icecreamScoops'));
+    if (!isNaN(savedScoops)) scoops = savedScoops;
+
+    const savedPerClick = parseInt(localStorage.getItem('icecreamPerClick'));
+    if (!isNaN(savedPerClick)) scoopsPerClick = savedPerClick;
+
+    const savedMultiplier = parseInt(localStorage.getItem('icecreamMultiplier'));
+    if (!isNaN(savedMultiplier)) multiplier = savedMultiplier;
+
+    const savedUpgrades = JSON.parse(localStorage.getItem('icecreamUpgrades'));
+    if (Array.isArray(savedUpgrades)) {
+      savedUpgrades.forEach((bought, i) => {
+        upgrades[i].bought = bought;
+        if (bought) upgrades[i].effect();
+      });
+    }
+  }
+
+  // Update UI text and button states
+  function updateDisplay() {
+    scoopsEl.textContent = 'Scoops: ' + scoops.toLocaleString();
+    perClickEl.textContent = 'Scoops per click: ' + (scoopsPerClick * multiplier).toLocaleString();
+
+    upgrades.forEach(u => {
+      const btn = document.getElementById(u.id);
+      if (u.bought) {
+        btn.textContent = `Upgrade Purchased`;
+        btn.disabled = true;
+      } else {
+        btn.textContent = `Buy Upgrade: ${btn.textContent.match(/\(Cost: [\d,]+ scoops\)/)[0]}`;
+        btn.disabled = scoops < u.cost;
+      }
+    });
+  }
+
+  // Enable or disable upgrades based on scoops available
+  function checkUpgrades() {
+    upgrades.forEach(u => {
+      const btn = document.getElementById(u.id);
+      if (!u.bought) {
+        btn.disabled = scoops < u.cost;
+      }
+    });
+  }
+
+  // Clicking the ice cream
+  icecreamBtn.addEventListener('click', () => {
+    scoops += scoopsPerClick * multiplier;
+    updateDisplay();
+    checkUpgrades();
+    saveProgress();
+  });
+
+  // Upgrade button handlers
+  upgrades.forEach(u => {
+    document.getElementById(u.id).addEventListener('click', () => {
+      if (!u.bought && scoops >= u.cost) {
+        scoops -= u.cost;
+        u.bought = true;
+        u.effect();
+        updateDisplay();
+        checkUpgrades();
+        saveProgress();
+      }
+    });
+  });
+
+  // Reset button handler
+  resetBtn.addEventListener('click', () => {
+    if (confirm('Are you sure you want to reset your progress?')) {
+      scoops = 0;
+      scoopsPerClick = 1;
+      multiplier = 1;
+      upgrades.forEach(u => u.bought = false);
+      updateDisplay();
+      checkUpgrades();
+      saveProgress();
+    }
+  });
+
+  // Initialize game
+  loadProgress();
+  updateDisplay();
+  checkUpgrades();
+</script>
+</body>
+</html>
