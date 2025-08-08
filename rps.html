@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rock Paper Scissors</title>
+<style>
+  body { font-family: sans-serif; background:#121212; color:#eee; display:flex; flex-direction: column; align-items: center; padding: 1rem; }
+  h1 { margin-bottom: 1rem; }
+  button {
+    margin: 0.5rem; padding: 1rem 2rem; font-size: 1.2rem; border:none; border-radius: 10px;
+    cursor: pointer; background:#0ea5a4; color:#121212; font-weight: 700; transition: background 0.3s;
+  }
+  button:hover { background:#14b8a6; }
+  #result { margin-top: 1rem; font-size: 1.5rem; min-height: 2rem; }
+</style>
+</head>
+<body>
+<h1>Rock Paper Scissors</h1>
+<div>
+  <button data-choice="rock">✊ Rock</button>
+  <button data-choice="paper">✋ Paper</button>
+  <button data-choice="scissors">✌️ Scissors</button>
+</div>
+<div id="result"></div>
+
+<script>
+  const buttons = document.querySelectorAll('button');
+  const result = document.getElementById('result');
+
+  function aiChoice() {
+    const choices = ['rock', 'paper', 'scissors'];
+    return choices[Math.floor(Math.random() * choices.length)];
+  }
+
+  function decideWinner(user, ai) {
+    if(user === ai) return "It's a tie!";
+    if(
+      (user === 'rock' && ai === 'scissors') ||
+      (user === 'paper' && ai === 'rock') ||
+      (user === 'scissors' && ai === 'paper')
+    ) return "You win!";
+    return "You lose!";
+  }
+
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const user = btn.dataset.choice;
+      const ai = aiChoice();
+      const outcome = decideWinner(user, ai);
+      result.textContent = `You chose ${user}, AI chose ${ai}. ${outcome}`;
+    });
+  });
+</script>
+</body>
+</html>
