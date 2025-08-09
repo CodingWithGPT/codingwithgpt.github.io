@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Starship Trader</title>
+<style>
+  body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;background:#031024;color:#dff;padding:16px}
+  header{display:flex;justify-content:space-between;align-items:center}
+  h1{margin:0;color:#9fe}
+  .layout{display:grid;grid-template-columns:320px 1fr 320px;gap:12px;margin-top:12px}
+  .card{background:#062038;border-radius:10px;padding:12px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+  .btn{padding:8px;border-radius:6px;background:#0a3;border:none;color:#012;cursor:pointer;margin:6px 4px}
+  .muted{color:#88a}
+  .market .item{display:flex;justify-content:space-between;padding:6px;border-bottom:1px solid rgba(255,255,255,.02)}
+  #map{height:320px;background:linear-gradient(#021,#002);border-radius:8px;padding:8px;overflow:auto}
+</style>
+</head><body>
+<header>
+  <h1>🚀 Starship Trader</h1>
+  <div class="muted">Credits: <strong id="credits">0</strong> • Fuel: <span id="fuel">100</span></div>
+</header>
+
+<div class="layout">
+  <aside class="card">
+    <h3>Ship & Cargo</h3>
+    <div>Ship: <span id="shipName">Courier</span></div>
+    <div>Hold: <span id="cargoCount">0</span>/<span id="cargoCap">12</span></div>
+    <div>Fuel: <span id="fuel2">100</span></div>
+    <hr/>
+    <div>
+      <button id="refuel" class="btn">Refuel (10 credits / fuel)</button>
+      <button id="upgradeCargo" class="btn">Upgrade Hold (200 credits)</button>
+    </div>
+    <hr/>
+    <div>
+      <h4>Active Missions</h4>
+      <div id="missions"></div>
+    </div>
+  </aside>
+
+  <main class="card">
+    <h3>Galaxy Map</h3>
+    <div id="map"></div>
+    <div style="margin-top:8px">
+      <select id="planetSelect"></select>
+      <button id="travel" class="btn">Travel</button>
+      <button id="autoTrade" class="btn">Auto Trade (toggle)</button>
+    </div>
+    <hr/>
+    <h4>Market</h4>
+    <div id="market" class="market"></div>
+  </main>
+
+  <aside class="card">
+    <h3>Info</h3>
+    <div id="events" style="min-height:120px"></div>
+    <hr/>
+    <div>
+      <h4>Debug</h4>
+      <button id="cheatMoney" class="btn">+10000 Credits</button>
+      <button id="spawnMission" class="btn">Spawn Mission</button>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ====== small GameAPI (inline) ====== */
+const GameAPI = {
+  init(id){ this.id = id; this.saveKey = 'save_' + id; this.state = {}; },
+  save(){ localStorage.setItem(this.saveKey, JSON.stringify(this.state)); this.log('Saved'); },
+  load(){ const s = localStorage.getItem(this.saveKey); if(!s) return false; this.state = JSON.parse(s); this.log('Loaded'); return true; },
+  export(){ const raw=localStorage.getItem(this.saveKey); if(!raw) return alert('No save'); const blob=new Blob([raw],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`${this.id}_save.json`; a.click(); URL.revokeObjectURL(url); },
+  log(msg){ const e = document.getElementById('events'); e.innerHTML = new Date().toLocaleTimeString() + ' — ' + msg + '<br/>' + e.innerHTML; }
+};
+GameAPI.init('star_trader');
+
+/* ====== Procedural galaxy ====== */
+function makeGalaxy(seed=1234){
+  const rnd = mulberry32(seed);
+  const planets = [];
+  const types = ['Core','Industrial','Agri','Desert','Tourism'];
+  for(let i=0;i<18;i++){
+    planets.push({
+      id:'P'+i,
+      name: (i%3===0? 'Nova':'Az') + i,
+      x: Math.floor(rnd()*100),
+      y: Math.floor(rnd()*100),
+      type: types[Math.floor(rnd()*types.length)],
+      market: makeMarket(rnd)
+    });
+  }
+  return planets;
+}
+function mulberry32(a){ return function(){ var t = a += 0x6D2B79F5; t = Math.imul(t ^ t>>>15, t | 1); t ^= t + Math.imul(t ^ t>>>7, t | 61); return ((t ^ t>>>14) >>> 0) / 4294967296; } }
+
+/* ====== Market builder ====== */
+function makeMarket(rndFn){
+  // goods with base price and volatility
+  const goods = [
+    {id:'ore',name:'Ore',base:10},
+    {id:'spice',name:'Spice',base:60},
+    {id:'tech',name:'Tech',base:200}
+  ];
+  return goods.map(g=>({ ...g, supply:Math.floor(5 + rndFn()*40), demand:Math.floor(5 + rndFn()*30), price: Math.round(g.base * (0.7 + rndFn()*0.8)) }));
+}
+
+/* ====== State ====== */
+const state = {
+  credits: 500,
+  fuel: 120,
+  ship: {name:'Courier', cargo: [], cap:12},
+  planets: makeGalaxy(98765),
+  current: null,
+  autoTrade: false,
+  missions: []
+};
+if(!GameAPI.load()) {
+  state.current = state.planets[0].id;
+  GameAPI.state = state;
+} else {
+  Object.assign(state, GameAPI.state);
+}
+
+/* ====== UI render ====== */
+function render(){
+  document.getElementById('credits').textContent = state.credits;
+  document.getElementById('fuel').textContent = state.fuel;
+  document.getElementById('fuel2').textContent = state.fuel;
+  document.getElementById('shipName').textContent = state.ship.name;
+  document.getElementById('cargoCount').textContent = state.ship.cargo.length;
+  document.getElementById('cargoCap').textContent = state.ship.cap;
+  renderMap();
+  renderMarket();
+  renderMissions();
+}
+function renderMap(){
+  const map = document.getElementById('map'); map.innerHTML = '';
+  state.planets.forEach(p=>{
+    const d = document.createElement('div'); d.style.padding='6px'; d.style.borderBottom='1px solid rgba(255,255,255,.03)';
+    d.innerHTML = `<strong>${p.name}</strong> • ${p.type} • market: ${p.market[0].price} — <button data-id="${p.id}">Visit</button>`;
+    d.querySelector('button').onclick = ()=>{ document.getElementById('planetSelect').value = p.id; };
+    map.appendChild(d);
+  });
+  const sel = document.getElementById('planetSelect'); sel.innerHTML='';
+  state.planets.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.text=p.name; sel.add(o);});
+  sel.value = state.current;
+}
+function renderMarket(){
+  const p = state.planets.find(x=>x.id===state.current);
+  const m = document.getElementById('market'); m.innerHTML = `<div class="muted">Market at ${p.name} (${p.type})</div>`;
+  p.market.forEach(g=>{
+    const div = document.createElement('div'); div.className='item';
+    div.innerHTML = `<div>${g.name}</div><div><small>${g.price} cr</small> <button data-buy="${g.id}" data-price="${g.price}">Buy</button></div>`;
+    div.querySelector('button').onclick = ()=>buyGood(g);
+    m.appendChild(div);
+  });
+}
+function renderMissions(){
+  const el = document.getElementById('missions'); el.innerHTML = '';
+  state.missions.forEach((m,i)=>{
+    const d = document.createElement('div'); d.style.padding='6px'; d.innerHTML = `${m.title} — reward ${m.reward} <button data-idx="${i}">Accept</button>`;
+    d.querySelector('button').onclick = ()=>acceptMission(i);
+    el.appendChild(d);
+  });
+}
+
+/* ====== market / buy / sell ====== */
+function buyGood(g){
+  if(state.ship.cargo.length >= state.ship.cap) return alert('Cargo full');
+  if(state.credits < g.price) return alert('Not enough credits');
+  state.credits -= g.price;
+  state.ship.cargo.push({id:g.id,price:g.price});
+  GameAPI.log(`Bought ${g.name} for ${g.price}`);
+  GameAPI.save();
+  render();
+}
+function sellAll(){
+  // simplistic: sell all at current market prices if available
+  const p = state.planets.find(x=>x.id===state.current);
+  let total = 0;
+  while(state.ship.cargo.length){
+    const item = state.ship.cargo.pop();
+    const marketItem = p.market.find(m=>m.id === item.id);
+    const sellPrice = marketItem ? Math.round(marketItem.price * (0.8 + Math.random()*0.6)) : Math.round(item.price*0.5);
+    total += sellPrice;
+  }
+  state.credits += total;
+  GameAPI.log(`Sold cargo for ${total}`);
+  GameAPI.save();
+  render();
+}
+
+/* ====== travel & events ====== */
+function travelTo(planetId){
+  const target = state.planets.find(p=>p.id === planetId);
+  if(!target) return;
+  const distance = Math.hypot((target.x - getCurrentPlanet().x),(target.y - getCurrentPlanet().y));
+  const fuelCost = Math.max(1, Math.round(distance/2));
+  if(state.fuel < fuelCost) return alert('Not enough fuel');
+  state.fuel -= fuelCost;
+  state.current = planetId;
+  GameAPI.log(`Traveled to ${target.name} (fuel ${fuelCost})`);
+  // random event
+  if(Math.random() < 0.18){
+    const lost = Math.floor(Math.random()*50);
+    state.credits = Math.max(0, state.credits - lost);
+    GameAPI.log(`Pirates attacked! Lost ${lost} credits.`);
+  }
+  // dynamic market shift
+  target.market.forEach(m=>{ m.price = Math.max(1, Math.round(m.base * (0.7 + Math.random()*1.0))); });
+  GameAPI.save();
+  render();
+}
+function getCurrentPlanet(){ return state.planets.find(p=>p.id === state.current); }
+
+/* ====== Missions ====== */
+function spawnMission(){
+  const target = state.planets[Math.floor(Math.random()*state.planets.length)];
+  const reward = 200 + Math.floor(Math.random()*400);
+  const m = {title:`Deliver to ${target.name}`, to:target.id, reward, timeout: 60 + Math.floor(Math.random()*120)};
+  state.missions.push(m);
+  GameAPI.log(`New mission: ${m.title}`);
+  renderMissions();
+}
+function acceptMission(idx){
+  const m = state.missions[idx];
+  state.missions.splice(idx,1);
+  // make it active in cargo as contract
+  state.ship.cargo.push({id:'contract',title:m.title,to:m.to,reward:m.reward});
+  GameAPI.log('Accepted mission: '+m.title);
+  GameAPI.save(); render();
+}
+
+/* ====== actions UI wiring ====== */
+document.getElementById('travel').onclick = ()=>{ travelTo(document.getElementById('planetSelect').value); render(); };
+document.getElementById('refuel').onclick = ()=>{
+  if(state.credits < 10) return alert('Not enough credits');
+  state.credits -= 10; state.fuel += 10; GameAPI.log('Refueled 10'); GameAPI.save(); render();
+};
+document.getElementById('upgradeCargo').onclick = ()=>{
+  if(state.credits < 200) return alert('Not enough credits');
+  state.credits -= 200; state.ship.cap += 4; GameAPI.log('Upgraded hold to '+state.ship.cap); GameAPI.save(); render();
+};
+document.getElementById('autoTrade').onclick = ()=>{
+  state.autoTrade = !state.autoTrade; GameAPI.log('Auto trade ' + (state.autoTrade? 'ON':'OFF'));
+};
+document.getElementById('cheatMoney').onclick = ()=>{ state.credits += 10000; render(); };
+document.getElementById('spawnMission').onclick = ()=>{ spawnMission(); render(); };
+document.getElementById('planetSelect').onchange = ()=>{ renderMarket(); };
+window.addEventListener('keydown', e=>{ if(e.key === 's' && (e.ctrlKey||e.metaKey)){ GameAPI.save(); alert('Saved'); }});
+
+/* ====== auto systems ====== */
+setInterval(()=>{ // market updates & auto trade actions
+  // simple mission timeout tick
+  state.missions.forEach(m=> m.timeout = Math.max(0, m.timeout - 1));
+  // autopilot selling logic: sell all if autoTrade
+  if(state.autoTrade){
+    sellAll();
+  }
+  // accept auto missions sometimes
+  if(Math.random() < 0.05) spawnMission();
+  GameAPI.save();
+  render();
+}, 5000);
+
+/* ====== helper ====== */
+function findPlanetById(id){ return state.planets.find(p=>p.id === id); }
+
+/* ====== init ====== */
+render();
+GameAPI.log('Welcome to Starship Trader. Use debug to spawn missions and test the economy.');
+</script>
+</body></html>

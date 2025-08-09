@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>City Builder</title>
+<style>
+  body{font-family:Inter,system-ui,Arial;padding:14px;background:linear-gradient(#f6fbff,#eaf3ff)}
+  header{display:flex;justify-content:space-between;align-items:center}
+  .layout{display:grid;grid-template-columns:360px 1fr 320px;gap:12px;margin-top:12px}
+  .card{background:#fff;border-radius:10px;padding:12px;box-shadow:0 8px 28px rgba(10,20,40,.06)}
+  #grid{display:grid;grid-template-columns:repeat(12,40px);gap:4px}
+  .cell{width:40px;height:40px;border-radius:6px;background:#eef;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer}
+  .hud{display:flex;gap:8px;align-items:center}
+  button{padding:8px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer}
+  .small{font-size:.85rem;color:#666}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏙 City Builder</h1>
+  <div class="hud">
+    Money: <strong id="money">0</strong> • Pop: <span id="pop">0</span> • Power: <span id="power">0</span>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="card">
+    <h3>Tools</h3>
+    <div>
+      <select id="buildType">
+        <option value="road">Road ($0)</option>
+        <option value="house">House ($15)</option>
+        <option value="shop">Shop ($50)</option>
+        <option value="factory">Factory ($120)</option>
+        <option value="power">Power Plant ($200)</option>
+      </select>
+      <button id="buildBtn">Build (first empty)</button>
+      <button id="toggleDemolish">Demolish Mode</button>
+    </div>
+    <hr/>
+    <h4>Upgrades</h4>
+    <div id="upgrades"></div>
+    <hr/>
+    <div>
+      <button id="save">Save</button>
+      <button id="export">Export</button>
+      <input id="importFile" type="file" accept="application/json" style="display:none"/>
+      <button id="importBtn">Import</button>
+    </div>
+    <hr/>
+    <div>
+      <button id="toggleDebug">Toggle Debug</button>
+      <div id="debug" style="display:none;margin-top:8px"><button id="cheatMoney">+1000</button><button id="instantBuild">Instant Build 10</button></div>
+    </div>
+  </aside>
+
+  <main class="card">
+    <h3>City Grid</h3>
+    <div id="grid"></div>
+    <div style="margin-top:8px" class="small">Click cells to place buildings. Roads are required for population to move. Factories produce jobs; shops increase happiness.</div>
+  </main>
+
+  <aside class="card">
+    <h3>Stats & Info</h3>
+    <div id="infoLog" class="small"></div>
+    <hr/>
+    <h4>Achievements</h4>
+    <div id="achievements"></div>
+  </aside>
+</div>
+
+<script>
+/* --- Core API (small) --- */
+const App = {
+  saveKey:'city_v1',
+  init(){ if(!localStorage.getItem(this.saveKey)) localStorage.setItem(this.saveKey, JSON.stringify(this.state)); else this.load(); window.addEventListener('beforeunload', ()=>this.save()); },
+  save(){ localStorage.setItem(this.saveKey, JSON.stringify(this.state)); log('Saved'); },
+  load(){ const s = localStorage.getItem(this.saveKey); if(s) this.state = JSON.parse(s); },
+  export(){ const raw = localStorage.getItem(this.saveKey); if(!raw) return alert('No save'); const blob = new Blob([raw],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='city_save.json'; a.click(); URL.revokeObjectURL(url); },
+  import(file, cb){ const r = new FileReader(); r.onload = e=>{ try{ const obj = JSON.parse(e.target.result); localStorage.setItem(this.saveKey, e.target.result); this.load(); renderAll(); if(cb) cb(true); }catch(e){ if(cb) cb(false); } }; r.readAsText(file); }
+};
+
+/* --- Game state --- */
+const W=12,H=8;
+const initialGrid = Array.from({length:W*H},()=>({type:'empty'}));
+App.state = {
+  money: 400,
+  grid: initialGrid,
+  ticks:0,
+  pop:0,
+  power:0,
+  demolish:false,
+  upgrades:{tax:1},
+  achievements:{}
+};
+App.init();
+
+/* --- helpers --- */
+const $ = id => document.getElementById(id);
+function log(msg){ const el=$('infoLog'); el.innerHTML = new Date().toLocaleTimeString() + ' — ' + msg + '<br/>' + el.innerHTML; }
+function renderAll(){ renderHUD(); renderGrid(); renderUpgrades(); renderAchievements(); }
+
+/* --- rendering --- */
+function renderHUD(){ $('money').textContent = App.state.money; $('pop').textContent = App.state.pop; $('power').textContent = App.state.power; }
+function renderGrid(){
+  const gridEl = $('grid'); gridEl.innerHTML=''; gridEl.style.gridTemplateColumns = `repeat(${W},40px)`;
+  App.state.grid.forEach((cell,i)=>{
+    const d = document.createElement('div'); d.className='cell';
+    if(cell.type==='empty'){ d.style.background='#eef'; d.textContent=''; }
+    else if(cell.type==='road'){ d.style.background='#ddd'; d.textContent='—'; }
+    else if(cell.type==='house'){ d.style.background='#ffd'; d.textContent='🏠'; }
+    else if(cell.type==='shop'){ d.style.background='#fde'; d.textContent='🏬'; }
+    else if(cell.type==='factory'){ d.style.background='#ddd'; d.textContent='🏭'; }
+    else if(cell.type==='power'){ d.style.background='#cfe'; d.textContent='⚡'; }
+    d.onclick = ()=> onCellClick(i);
+    gridEl.appendChild(d);
+  });
+}
+
+/* --- upgrades --- */
+function renderUpgrades(){
+  const el=$('upgrades'); el.innerHTML='';
+  const ups = [{id:'tax',name:'Raise tax revenue (+20%)',cost:200}];
+  ups.forEach(u=>{
+    const div = document.createElement('div'); div.innerHTML = `${u.name} <button data-id="${u.id}">Buy ${u.cost}</button>`;
+    div.querySelector('button').onclick = ()=>{ if(App.state.money < u.cost) return alert('No money'); App.state.money -= u.cost; App.state.upgrades[u.id] = (App.state.upgrades[u.id]||0) + 1; log('Bought '+u.name); renderAll(); App.save(); };
+    el.appendChild(div);
+  });
+}
+
+/* --- achievements --- */
+function renderAchievements(){ const el=$('achievements'); el.innerHTML=''; for(const k in App.state.achievements) el.innerHTML += `<div>${k}</div>`; }
+
+/* --- actions --- */
+function onCellClick(i){
+  const type = $('buildType').value;
+  if(App.state.demolish){ // demolish
+    App.state.grid[i] = {type:'empty'}; log('Demolished'); renderAll(); App.save(); return;
+  }
+  // build at clicked
+  const cost = buildCost(type);
+  if(App.state.money < cost){ alert('Not enough money'); return; }
+  // find empty or use clicked if empty
+  if(App.state.grid[i].type === 'empty'){
+    App.state.grid[i] = {type};
+    App.state.money -= cost;
+    log(`Built ${type} at ${i+1}`);
+    renderAll(); App.save(); return;
+  } else {
+    alert('Cell occupied');
+  }
+}
+function buildCost(t){
+  if(t==='house') return 15;
+  if(t==='shop') return 50;
+  if(t==='factory') return 120;
+  if(t==='power') return 200;
+  return 0;
+}
+$('buildBtn').onclick = ()=>{
+  const type = $('buildType').value;
+  const idx = App.state.grid.findIndex(c=>c.type==='empty');
+  if(idx === -1) return alert('No empty space');
+  const cost = buildCost(type);
+  if(App.state.money < cost) return alert('Not enough money');
+  App.state.grid[idx].type = type;
+  App.state.money -= cost;
+  log(`Built ${type} at ${idx+1}`);
+  renderAll(); App.save();
+};
+$('toggleDemolish').onclick = ()=>{ App.state.demolish = !App.state.demolish; $('toggleDemolish').textContent = App.state.demolish ? 'Demolish ON' : 'Demolish Mode'; };
+$('save').onclick = ()=>{ App.save(); alert('Saved'); };
+$('export').onclick = ()=>{ App.export(); };
+$('importBtn').onclick = ()=>$('importFile').click();
+$('importFile').onchange = (e)=>{ const f = e.target.files[0]; if(!f) return; App.import(f, ok=>{ if(ok) renderAll(); else alert('Import failed'); }); };
+$('toggleDebug').onclick = ()=>{ const d = $('debug'); d.style.display = d.style.display === 'none' ? 'block' : 'none'; };
+$('cheatMoney').onclick = ()=>{ App.state.money += 1000; renderAll(); App.save(); };
+$('instantBuild').onclick = ()=>{ for(let i=0;i<10;i++){ const idx = App.state.grid.findIndex(c=>c.type==='empty'); if(idx===-1) break; App.state.grid[idx].type='house'; } renderAll(); App.save(); };
+
+/* --- simulation tick --- */
+function simulateTick(){
+  App.state.ticks++;
+  // population = houses * factor if connected to road & power
+  const houses = App.state.grid.filter(c=>c.type==='house').length;
+  const shops = App.state.grid.filter(c=>c.type==='shop').length;
+  const factories = App.state.grid.filter(c=>c.type==='factory').length;
+  const powerPlants = App.state.grid.filter(c=>c.type==='power').length;
+  const roads = App.state.grid.filter(c=>c.type==='road').length;
+  // requirement: road nearby count (simple)
+  const connectedHouses = houses; // simplified
+  const pop = Math.floor(connectedHouses * (1 + (shops*0.05)) * (1 + (App.state.upgrades.tax-1)*0.2));
+  App.state.pop = pop;
+  App.state.power = powerPlants * 5;
+  // income: tax from pop
+  const income = Math.max(0, Math.floor(pop * (0.5 + shops*0.05)));
+  App.state.money += income;
+  // factories produce job value convert to revenue risk
+  if(factories > 0 && Math.random() < 0.02) {
+    // occasional disaster
+    App.state.money -= factories * 5;
+    log('Factory accident! Repair cost deducted.');
+  }
+  // achievements
+  if(App.state.money >= 5000 && !App.state.achievements['Tycoon']) App.state.achievements['Tycoon'] = true;
+  renderAll();
+  App.save();
+}
+setInterval(simulateTick, 5000);
+
+/* --- start --- */
+renderAll();
+log('Welcome Mayor! Place roads and buildings to grow your city.');
+</script>
+</body>
+</html>

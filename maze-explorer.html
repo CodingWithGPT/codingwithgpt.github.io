@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Maze Explorer</title>
+<style>
+ body{font-family:system-ui;padding:14px;background:linear-gradient(#f4f7ff,#fefcf2)}
+ .card{background:#fff;padding:12px;border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.06)}
+ #board{display:grid;gap:2px}
+ .cell{width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border-radius:4px}
+</style>
+</head><body>
+<h1>🧭 Maze Explorer</h1>
+<div class="card">
+  <div>Use arrow keys to move. Press New to generate a maze.</div>
+  <div style="margin-top:8px"><button id="new">Generate New</button><button id="solve">Show Path</button></div>
+  <div id="board" style="margin-top:10px"></div>
+</div>
+
+<script>
+const COLS=21, ROWS=15;
+let grid=[],player={x:1,y:1},goal={x:COLS-2,y:ROWS-2};
+function initMaze(){
+  // simple DFS maze generator (odd dimensions)
+  grid = Array.from({length:ROWS},()=>Array.from({length:COLS},()=>1));
+  function carve(x,y){
+    grid[y][x]=0;
+    const dirs = [[2,0],[-2,0],[0,2],[0,-2]];
+    for(let d of shuffle(dirs)){
+      const nx = x + d[0], ny = y + d[1];
+      if(nx>0 && nx<COLS-1 && ny>0 && ny<ROWS-1 && grid[ny][nx]===1){
+        grid[y + d[1]/2][x + d[0]/2] = 0;
+        carve(nx,ny);
+      }
+    }
+  }
+  carve(1,1);
+  player = {x:1,y:1}; goal={x:COLS-2,y:ROWS-2};
+  render();
+}
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; }
+function render(){
+  const b = document.getElementById('board'); b.innerHTML=''; b.style.gridTemplateColumns = `repeat(${COLS},28px)`;
+  for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+    const el = document.createElement('div'); el.className='cell';
+    if(grid[y][x]===1) el.style.background='#333'; else el.style.background='#e6f7ff';
+    if(player.x===x && player.y===y) el.textContent='🙂';
+    else if(goal.x===x && goal.y===y) el.textContent='🏁';
+    b.appendChild(el);
+  }
+}
+document.addEventListener('keydown',(e)=>{
+  const dir = (e.key==='ArrowUp'? [0,-1] : e.key==='ArrowDown'? [0,1] : e.key==='ArrowLeft'? [-1,0] : e.key==='ArrowRight'? [1,0] : null);
+  if(!dir) return;
+  const nx = player.x + dir[0], ny = player.y + dir[1];
+  if(nx>=0 && nx<COLS && ny>=0 && ny<ROWS && grid[ny][nx]===0){ player.x=nx; player.y=ny; render(); if(player.x===goal.x && player.y===goal.y) alert('You reached the goal!'); }
+});
+document.getElementById('new').onclick = ()=>initMaze();
+document.getElementById('solve').onclick = ()=>{ const path = astar(player,goal); if(!path) return alert('No path'); path.forEach(p=>{ setTimeout(()=>{ player.x=p.x; player.y=p.y; render(); },200*(path.indexOf(p))); }); };
+function astar(start,goal){
+  const key=(p)=>p.x+','+p.y;
+  const open=[{x:start.x,y:start.y,g:0,f:heur(start,goal),parent:null}];
+  const closed={};
+  while(open.length){
+    open.sort((a,b)=>a.f-b.f);
+    const cur=open.shift();
+    if(cur.x===goal.x && cur.y===goal.y){
+      const path=[]; let node=cur; while(node){ path.unshift({x:node.x,y:node.y}); node=node.parent; } return path;
+    }
+    closed[key(cur)]=true;
+    const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+    for(let d of dirs){
+      const nx=cur.x+d[0], ny=cur.y+d[1];
+      if(nx<0||nx>=COLS||ny<0||ny>=ROWS) continue;
+      if(grid[ny][nx]===1) continue;
+      if(closed[nx+','+ny]) continue;
+      const g = cur.g+1; const f = g + heur({x:nx,y:ny},goal);
+      const existing = open.find(o=>o.x===nx && o.y===ny);
+      if(existing){ if(g < existing.g){ existing.g=g; existing.f=f; existing.parent=cur; } } else open.push({x:nx,y:ny,g,f,parent:cur});
+    }
+  }
+  return null;
+}
+function heur(a,b){ return Math.abs(a.x-b.x)+Math.abs(a.y-b.y); }
+initMaze();
+</script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Pet Simulator</title>
+<style>
+ body{font-family:system-ui;padding:14px;background:linear-gradient(#fff7e6,#fff)}
+ .card{background:#fff;padding:12px;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.06)}
+ .layout{display:grid;grid-template-columns:360px 1fr;gap:12px}
+ button{padding:8px;border-radius:6px}
+</style>
+</head><body>
+<h1>🐶 Pet Simulator</h1>
+<div class="layout">
+  <aside class="card">
+    <h3>Your Pet</h3>
+    <div>Name: <input id="name" value="Fluff"/></div>
+    <div>Hunger: <span id="hunger">50</span> • Happiness: <span id="happiness">50</span></div>
+    <div>Level: <span id="level">1</span> • XP: <span id="xp">0</span></div>
+    <hr/>
+    <button id="feed">Feed</button><button id="play">Play</button><button id="train">Train</button>
+    <hr/>
+    <button id="save">Save</button><button id="export">Export</button><input id="importFile" type="file" accept="application/json" style="display:none"/><button id="importBtn">Import</button>
+  </aside>
+
+  <main class="card">
+    <h3>Activities</h3>
+    <div id="activities"></div>
+    <h4 style="margin-top:12px">Achievements</h4>
+    <div id="achievements"></div>
+    <h4 style="margin-top:12px">Log</h4>
+    <div id="log" style="height:200px;overflow:auto;font-family:monospace"></div>
+  </main>
+</div>
+
+<script>
+const Game = {key:'pet_v1', init(){ if(!localStorage.getItem(this.key)) this.save(); else this.load(); }, save(){ localStorage.setItem(this.key, JSON.stringify(this.state)); log('Saved'); }, load(){ const s=localStorage.getItem(this.key); if(s) this.state = JSON.parse(s); }, export(){ const raw=localStorage.getItem(this.key); if(!raw) return alert('No save'); const blob=new Blob([raw],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='pet_save.json'; a.click(); URL.revokeObjectURL(url); }, import(file,cb){ const r=new FileReader(); r.onload=e=>{ try{ localStorage.setItem(this.key,e.target.result); this.load(); if(cb)cb(true);}catch(e){ if(cb)cb(false);} }; r.readAsText(file); } };
+Game.state = {name:'Fluff',hunger:60,happiness:60,level:1,xp:0,ach:{}};
+Game.init();
+const $ = id=>document.getElementById(id);
+function log(msg){ $('log').innerHTML = new Date().toLocaleTimeString() + ' — ' + msg + '<br/>' + $('log').innerHTML; }
+function render(){ $('hunger').textContent = Game.state.hunger; $('happiness').textContent = Game.state.happiness; $('level').textContent = Game.state.level; $('xp').textContent = Game.state.xp; renderAch(); }
+function renderAch(){ const el = $('achievements'); el.innerHTML = Object.keys(Game.state.ach).length ? Object.keys(Game.state.ach).map(a=>`<div>${a}</div>`).join('') : 'None'; }
+$('feed').onclick = ()=>{ Game.state.hunger = Math.min(100, Game.state.hunger + 20); Game.state.xp += 10; log('Fed pet'); checkLevel(); Game.save(); render(); };
+$('play').onclick = ()=>{ Game.state.happiness = Math.min(100, Game.state.happiness + 25); Game.state.xp += 15; log('Played with pet'); checkLevel(); Game.save(); render(); };
+$('train').onclick = ()=>{ const success = Math.random() < (Game.state.happiness/100); if(success){ Game.state.xp += 30; log('Training success! XP +30'); if(Game.state.xp >= 100) checkLevel(); } else { Game.state.happiness = Math.max(0, Game.state.happiness - 10); log('Training failed. Happiness -10'); } Game.save(); render(); };
+function checkLevel(){ if(Game.state.xp >= 100){ Game.state.level +=1; Game.state.xp -= 100; Game.state.ach['Leveled to '+Game.state.level] = true; log('Leveled up to '+Game.state.level); } }
+$('save').onclick = ()=>{ Game.save(); alert('Saved'); };
+$('export').onclick = ()=>Game.export();
+$('importBtn').onclick = ()=>$('importFile').click();
+$('importFile').onchange = (e)=>{ const f = e.target.files[0]; if(!f) return; Game.import(f,ok=>{ if(ok) render(); else alert('Import failed'); }); };
+
+/* passive decay */
+setInterval(()=>{ Game.state.hunger = Math.max(0, Game.state.hunger-1); Game.state.happiness = Math.max(0, Game.state.happiness-1); Game.save(); render(); }, 5000);
+
+/* starter */
+render(); log('Welcome to Pet Simulator — care, play, and train your pet!');
+</script>
+</body>
+</html>

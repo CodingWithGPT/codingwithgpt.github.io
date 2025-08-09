@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Music Studio</title>
+<style>
+ body{font-family:system-ui;padding:14px;background:linear-gradient(#f7f7ff,#fff)}
+ .card{background:#fff;padding:12px;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.06)}
+ button{padding:8px}
+ #grid{display:grid;grid-template-columns: repeat(8,50px); gap:6px}
+ .cell{width:50px;height:40px;border-radius:6px;border:1px solid #ddd;display:flex;align-items:center;justify-content:center;cursor:pointer}
+</style>
+</head><body>
+<h1>🎶 Music Studio (Sequencer)</h1>
+<div class="card">
+  Tempo: <input id="tempo" type="number" value="140" style="width:80px"/> <button id="play">Play</button> <button id="stop">Stop</button>
+  <div id="grid" style="margin-top:12px"></div>
+</div>
+
+<script>
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+const rows=4,cols=8; const grid=[]; const g=document.getElementById('grid'); g.style.gridTemplateColumns = `repeat(${cols},50px)`;
+for(let r=0;r<rows;r++){ for(let c=0;c<cols;c++){ const b=document.createElement('div'); b.className='cell'; b.dataset.on='0'; b.textContent='.'; b.onclick=()=>{ b.dataset.on = b.dataset.on==='0'?'1':'0'; b.style.background = b.dataset.on==='1'?'#8ef':'#fff'; }; grid.push(b); g.appendChild(b); } }
+let timer=null, step=0;
+const pitches=[220,247,262,294];
+function tone(freq,dur=0.15){ const o=ctx.createOscillator(); const gA=ctx.createGain(); o.type='sine'; o.frequency.value=freq; gA.gain.value=0.08; o.connect(gA); gA.connect(ctx.destination); o.start(); setTimeout(()=>o.stop(), dur*1000); }
+document.getElementById('play').onclick = ()=>{
+  if(timer) return;
+  const tempo = Number(document.getElementById('tempo').value) || 120;
+  const interval = (60/tempo)*1000;
+  timer = setInterval(()=>{ for(let r=0;r<rows;r++){ const b = grid[r*cols + step]; if(b.dataset.on==='1') tone(pitches[r]); } step = (step+1)%cols; }, interval);
+};
+document.getElementById('stop').onclick = ()=>{ clearInterval(timer); timer=null; step=0; };
+</script>
+</body>
+</html>

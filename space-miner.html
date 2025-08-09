@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Space Miner</title>
+<style>
+ body{font-family:system-ui;padding:14px;background:#000;color:#dfe}
+ .layout{display:grid;grid-template-columns:320px 1fr 320px;gap:12px}
+ .card{background:#071428;padding:12px;border-radius:10px}
+ button{padding:8px;border-radius:6px;background:#0a3;border:none;color:#012;cursor:pointer}
+ .asteroid{padding:8px;border-radius:6px;background:#052;cursor:pointer;margin-bottom:8px}
+</style>
+</head><body>
+<h1>⛏ Space Miner</h1>
+<div class="layout">
+  <aside class="card">
+    <h3>Ship</h3>
+    <div>Energy: <span id="energy">100</span> • Hull: <span id="hull">100</span></div>
+    <div>Credits: <strong id="credits">0</strong></div>
+    <button id="upgradeLaser">Upgrade Laser (200g)</button>
+    <hr/>
+    <button id="save">Save</button><button id="export">Export</button><input id="importFile" type="file" accept="application/json" style="display:none"/><button id="importBtn">Import</button>
+  </aside>
+
+  <main class="card">
+    <h3>Asteroid Field</h3>
+    <div id="field"></div>
+    <hr/>
+    <button id="scan">Scan Field (cost 5e)</button>
+  </main>
+
+  <aside class="card">
+    <h3>Logs</h3>
+    <div id="log" style="height:300px;overflow:auto;font-family:monospace"></div>
+    <hr/>
+    <div><button id="cheat">Cheat +1000</button></div>
+  </aside>
+</div>
+
+<script>
+/* minimal API */
+const Game = {key:'miner_v1', init(){ if(!localStorage.getItem(this.key)) this.save(); else this.load(); }, save(){ localStorage.setItem(this.key, JSON.stringify(this.state)); log('Saved'); }, load(){ const s=localStorage.getItem(this.key); if(s) this.state = JSON.parse(s); }, export(){ const raw=localStorage.getItem(this.key); if(!raw) return alert('No save'); const blob=new Blob([raw],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='miner_save.json'; a.click(); URL.revokeObjectURL(url); }, import(file,cb){ const r=new FileReader(); r.onload=e=>{ try{ localStorage.setItem(this.key,e.target.result); this.load(); if(cb)cb(true);}catch(e){ if(cb)cb(false);} }; r.readAsText(file); } };
+Game.state = {credits:300,energy:100,hull:100,laser:1,ore:[],field:[]};
+Game.init();
+
+const $ = id => document.getElementById(id);
+function log(msg){ $('log').innerHTML = new Date().toLocaleTimeString() + ' — ' + msg + '\n' + $('log').innerHTML; }
+function render(){ $('credits').textContent = Game.state.credits; $('energy').textContent = Game.state.energy; $('hull').textContent = Game.state.hull; renderField(); }
+function rnd(max){ return Math.floor(Math.random()*max); }
+
+/* generate field */
+function genField(){
+  Game.state.field = [];
+  for(let i=0;i<6;i++){
+    Game.state.field.push({id:i,hardness:1+Math.floor(Math.random()*5),ores:[{type:'iron',amt:1+Math.floor(Math.random()*5)},{type:'rare',amt:Math.random()<0.2?1:0}]});
+  }
+}
+function renderField(){
+  const f = $('field'); f.innerHTML = '';
+  Game.state.field.forEach(a=>{
+    const d = document.createElement('div'); d.className='asteroid';
+    d.innerHTML = `Asteroid #${a.id} — hardness ${a.hardness} • ores: ${a.ores.map(o=>o.type+':'+o.amt).join(', ')} <button data-id="${a.id}">Mine</button>`;
+    d.querySelector('button').onclick = ()=>mine(a.id);
+    f.appendChild(d);
+  });
+}
+
+/* mining */
+function mine(id){
+  const a = Game.state.field.find(x=>x.id===id);
+  if(!a) return;
+  if(Game.state.energy < 10) return alert('Not enough energy');
+  Game.state.energy -= 10;
+  // mining uses laser power
+  const chance = 0.6 + (Game.state.laser * 0.08) - (a.hardness*0.05);
+  if(Math.random() < chance){
+    const found = a.ores.map(o=>({type:o.type,amt:o.amt})).filter(o=>o.amt>0);
+    found.forEach(fx=>{ for(let i=0;i<fx.amt;i++) Game.state.ore.push(fx.type); });
+    log('Mined asteroid '+id+' and found '+found.map(f=>f.type+':'+f.amt).join(', '));
+    // remove or reduce
+    a.ores.forEach(o=>o.amt = Math.max(0, o.amt - 1));
+  } else {
+    log('Mining failed on asteroid '+id);
+    if(Math.random() < 0.2){ Game.state.hull -= Math.floor(Math.random()*10); log('Tool hit caused hull damage!'); }
+  }
+  Game.save(); render();
+}
+
+/* sell ore */
+document.getElementById('field').addEventListener('dblclick', ()=>{ // dblclick anywhere sells ore
+  if(Game.state.ore.length===0) return alert('No ore');
+  const val = Game.state.ore.reduce((s,o)=> s + (o==='rare'?50:10),0);
+  Game.state.credits += val;
+  Game.state.ore = [];
+  log('Sold ore for '+val+' credits');
+  Game.save(); render();
+});
+
+/* UI actions */
+$('scan').onclick = ()=>{ if(Game.state.energy < 5) return alert('Not enough energy'); Game.state.energy -=5; genField(); log('Scanned new field'); Game.save(); render(); };
+$('upgradeLaser').onclick = ()=>{ if(Game.state.credits < 200) return alert('Not enough credits'); Game.state.credits -=200; Game.state.laser +=1; log('Upgraded laser to '+Game.state.laser); Game.save(); render(); };
+$('save').onclick = ()=>{ Game.save(); alert('Saved'); };
+$('export').onclick = ()=>{ Game.export(); };
+$('importBtn').onclick = ()=>$('importFile').click();
+$('importFile').onchange = (e)=>{ const f=e.target.files[0]; if(!f) return; Game.import(f, ok=>{ if(ok) render(); else alert('Import failed'); }); };
+$('cheat').onclick = ()=>{ Game.state.credits += 1000; render(); Game.save(); };
+
+/* auto regen energy */
+setInterval(()=>{ Game.state.energy = Math.min(100, Game.state.energy + 2); Game.save(); render(); }, 3000);
+
+/* init */
+genField(); render(); log('Welcome to Space Miner — double-click field to sell ore quickly.');
+</script>
+</body>
+</html>
